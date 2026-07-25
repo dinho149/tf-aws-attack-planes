@@ -109,6 +109,28 @@ output "scenario_04_alarm_names" {
   value       = one(module.scenario_04[*].alarm_names)
 }
 
+# --- Scenario 5 (S3 data-events exfil / storage plane) -----------------------
+
+output "scenario_05_crown_jewels_bucket" {
+  description = "Scenario 5: the 'crown jewels' bucket the attacker mass-reads. null when scenario_05_enabled = false."
+  value       = one(module.scenario_05[*].crown_jewels_bucket)
+}
+
+output "scenario_05_attack_function_name" {
+  description = "Scenario 5 attack Lambda. Invoke it (e.g. via simulate-attack.sh -s 5) to re-run the scenario on demand."
+  value       = one(module.scenario_05[*].attack_function_name)
+}
+
+output "scenario_05_data_events_trail" {
+  description = "Scenario 5: the scoped S3 data-event trail. null when scenario_05_enabled = false OR enable_data_events = false (the 'no record' experiment)."
+  value       = one(module.scenario_05[*].data_events_trail)
+}
+
+output "scenario_05_alarm_names" {
+  description = "Scenario 5: the crown-jewels-reads metric-filter alarm that trips on the mass read."
+  value       = one(module.scenario_05[*].alarm_names)
+}
+
 output "region" {
   description = "Region the estate is deployed in (where you invoke the attack Lambda)."
   value       = var.region

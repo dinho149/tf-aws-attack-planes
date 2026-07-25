@@ -22,12 +22,12 @@ investigate it — so you can run the whole "what is this user doing?" loop your
 │   ├── foundation/                    # shared audit-logging estate, reused by every scenario
 │   │   • multi-region CloudTrail (log-file validation, global events)
 │   │     delivering to BOTH S3 (forensics/Athena) and CloudWatch Logs (alarms)
-│   │   • S3 log bucket · Athena workgroup + Glue database · GuardDuty · SNS alert topic
+│   │   • S3 log bucket · Athena workgroup + Glue database · shared cloudtrail_logs table · GuardDuty · SNS alert topic
 │   ├── scenario-01-account-takeover/  # the leaked-key control-plane attack
 │   │   ├── attack.tf        # (1) trigger:     leaked user + key + auto-firing attack Lambda
 │   │   ├── detect.tf        # (2) detect:      CloudTrail metric-filter alarms + GuardDuty→EventBridge
 │   │   ├── respond.tf       # (2) respond:     quarantine Lambda (deny-all) + destroy-time cleanup
-│   │   └── investigate.tf   # (3) investigate: Glue table (partition projection) + saved Athena queries
+│   │   └── investigate.tf   # (3) investigate: saved Athena queries over the shared cloudtrail_logs table
 │   ├── scenario-02-compromised-workload/  # the network-plane egress/lateral-movement attack
 │   │   ├── network.tf       # (0) target:      VPC + public subnet + IMDSv2 EC2 + VPC Flow Logs (→ S3 + CWL)
 │   │   ├── attack.tf        # (1) trigger:     attack Lambda drives the box via SSM (exfil + REJECT probes)
@@ -40,18 +40,25 @@ investigate it — so you can run the whole "what is this user doing?" loop your
 │   │   ├── detect.tf        # (2) detect:      scheduled Athena hunter Lambda + GuardDuty→EventBridge
 │   │   ├── prevent.tf       # (2) prevent:     optional DNS Firewall rule group (BLOCK the demo domains)
 │   │   └── investigate.tf   # (3) investigate: Glue table over Resolver logs + saved Athena queries
-│   └── scenario-04-web-attack/            # the web-plane WAF + ALB attack
-│       ├── network.tf       # (0) target:      public ALB (fixed-response, no EC2) + WAFv2 web ACL (→ WAF logs to CWL, ALB logs to S3)
-│       ├── attack.tf        # (1) trigger:     attack Lambda hits the ALB over HTTP (SQLi + burst + 404 scanning)
-│       ├── detect.tf        # (2) detect:      WAF-blocked-requests metric-filter alarm (WAF blocks in real time)
-│       └── investigate.tf   # (3) investigate: Glue table over ALB logs + Athena query + saved WAF Logs Insights query
+│   ├── scenario-04-web-attack/            # the web-plane WAF + ALB attack
+│   │   ├── network.tf       # (0) target:      public ALB (fixed-response, no EC2) + WAFv2 web ACL (→ WAF logs to CWL, ALB logs to S3)
+│   │   ├── attack.tf        # (1) trigger:     attack Lambda hits the ALB over HTTP (SQLi + burst + 404 scanning)
+│   │   ├── detect.tf        # (2) detect:      WAF-blocked-requests metric-filter alarm (WAF blocks in real time)
+│   │   └── investigate.tf   # (3) investigate: Glue table over ALB logs + Athena query + saved WAF Logs Insights query
+│   └── scenario-05-s3-exfil/              # the storage-plane S3 data-events exfil
+│       ├── storage.tf       # (0) target:      crown-jewels S3 bucket (BPA + versioning) + scoped S3 data-event trail (→ shared S3 + CWL)
+│       ├── attack.tf        # (1) trigger:     attack Lambda assumes an over-permissive role, lists + GetObjects every key
+│       ├── detect.tf        # (2) detect:      crown-jewels GetObject metric-filter alarm + GuardDuty→EventBridge
+│       └── investigate.tf   # (3) investigate: saved Athena queries over the shared cloudtrail_logs table (no new table)
 └── scripts/
     └── simulate-attack.sh   # fire a scenario's attack Lambda on demand, N times (see "Re-run the attack")
 ```
 
 Every scenario module follows the same shape: **trigger the attack · detect it · investigate
 it** (with an optional **respond**/**prevent** step). Scenario 1 is the reference the later
-planes (Network / DNS / Web / Storage) copy.
+planes (Network / DNS / Web / Storage) copy. The `cloudtrail_logs` Glue table lives in the
+**foundation** because two planes read it — Scenario 1 (management events) and Scenario 5
+(S3 data events, delivered into the same trail prefix).
 
 ## Scenario 1 — Account Takeover (control plane / CloudTrail)
 
@@ -366,6 +373,100 @@ in S3 before the Athena queries have data.
 > they're up, so don't leave it running overnight for the sake of a screenshot —
 > `scenario_04_enabled = false` and re-apply, or `terraform destroy`.
 
+## Scenario 5 — S3 Data-Events Exfil (storage plane)
+
+This is the question your board, your regulator, and your biggest customer ask: **did the
+data actually leave?** An attacker with a foothold assumes an over-permissive role and does
+the most mundane, devastating thing there is — `ListObjectsV2` to enumerate a sensitive
+bucket, then `GetObject` on every key. No exploit, no malware.
+
+The catch, and the whole lesson of this part: **CloudTrail does not log object-level access
+out of the box.** The foundation trail is multi-region, validated, dual-delivery — and it has
+no event selectors, so it captures **management events only**. It will faithfully record that
+someone changed a bucket policy (`PutBucketPolicy`), but the `GetObject` calls that read every
+file inside are **data events — off by default, and billed per event**. Turn them on for the
+buckets worth stealing from, scoped with advanced event selectors, and **never** for your log
+bucket (a data-event trail writing to its own log bucket is a recursive billing loop).
+
+This scenario is **off by default** because it deliberately turns on that paid feature (data
+events on one small bucket). Turn it on:
+
+```hcl
+# terraform.tfvars
+scenario_05_enabled = true
+auto_fire           = true
+enable_data_events  = true    # the scoped data-event trail — the point of the lesson
+enable_guardduty    = false   # the default; true only on a paid sandbox
+```
+
+On apply the module stands up a **"crown jewels" bucket** — Block Public Access on, versioning
+enabled, seeded with a handful of **synthetic** sensitive-looking objects (fake customer
+records, nothing real) — plus a **second, dedicated CloudTrail scoped to S3 data events on
+that one bucket**. It delivers into the shared S3 bucket (same `AWSLogs/.../CloudTrail` prefix)
+and the shared CloudWatch group, so the data events land right alongside the management events
+from Part 2. The attack Lambda then assumes the over-permissive role and reads every object; a
+metric-filter alarm counting `GetObject` against the crown-jewels bucket trips a minute or two
+later, and SNS emails you. (With `enable_guardduty = true`, GuardDuty S3 Protection adds an
+`Exfiltration:S3/AnomalousBehavior` finding via the same EventBridge→SNS path.)
+
+> [!NOTE]
+> **Why a separate trail, not selectors on the foundation trail.** Adding any
+> `advanced_event_selector` to a trail *replaces* its default management-events selector — so
+> bolting data events onto the foundation trail would silently stop it recording the management
+> events Scenarios 1–4 depend on. A dedicated trail keeps the two concerns (and the per-event
+> bill) cleanly separable.
+
+> [!NOTE]
+> **First apply waits for the trail to warm up.** A brand-new CloudTrail takes a few minutes
+> before it actually starts capturing events. If the attack fired the instant the trail was
+> created, the reads would slip through *unrecorded* and the alarm would never trip. So the
+> on-apply auto-fire waits out a `trail_warmup_duration` (default `300s`) after the trail is
+> created — you'll see `apply` pause on `time_sleep.trail_warmup`. This is paid **once**, on
+> the apply that stands the trail up; manual re-runs via `simulate-attack.sh` hit an
+> already-warm trail and skip the wait.
+
+### Investigate — "did they actually read it?"
+
+The nice payoff: data events land in the same prefix as the management events, so the existing
+`cloudtrail_logs` Glue table queries them — **no new table needed, just new saved queries.**
+And because data events carry the same `userIdentity` as management events, you can pivot
+straight back to the API-plane query from Part 2, unchanged.
+
+| Query | Answers |
+|---|---|
+| `s05-01-did-they-read-it` | Object-level access against the crown-jewels bucket, grouped by principal + source IP. A principal that normally reads nothing suddenly pulling every object is your exfil, in one row. |
+| `s05-02-which-objects-were-read` | The actual object keys read, with timestamps, principal and IP. The one that matters in an incident: not "a bucket was accessed" but "these specific files were read, at these times, by this principal." |
+
+### The experiment that makes the point
+
+Do this before you tear it down — it's the whole lesson in one command. Set
+`enable_data_events = false` and re-apply (that removes the scoped trail, leaving exactly the
+setup the previous four scenarios ran on), then re-fire and re-run `s05-01`:
+
+```bash
+./scripts/simulate-attack.sh -s 5
+```
+
+It returns **nothing**. Not an error — nothing. The bucket was read, every object left, and
+your beautifully configured audit trail has no record of it. That's what "off by default"
+costs you.
+
+### Re-run the attack
+
+```bash
+./scripts/simulate-attack.sh -s 5                 # fire once
+./scripts/simulate-attack.sh -s 5 -n 5 -i 60      # fire 5 times, 60s apart
+```
+
+Detect-only (GuardDuty S3 Protection / the metric-filter alarm), so — like Scenarios 3 and 4 —
+there's no responder and nothing to reset between runs.
+
+> [!NOTE]
+> **Turn the data-event trail off when you're done.** It's the one component here that bills
+> per event. `enable_data_events = false` (or `scenario_05_enabled = false`) and re-apply, or
+> `terraform destroy`. The crown-jewels bucket has `force_destroy` set, so teardown doesn't
+> choke on the seeded objects — and it's synthetic data anyway.
+
 ## Teardown
 
 ```bash
@@ -406,6 +507,8 @@ the log bucket so teardown doesn't choke on the objects CloudTrail wrote.
 | `scenario_03_enabled` | `false` | Deploy Scenario 3 (DNS exfil / DNS plane). Off by default because it stands up a VPC + a `t3.micro` EC2 instance + Route 53 Resolver query logging (small ongoing cost). |
 | `enable_dns_firewall` | `false` | Scenario 3 only: also stand up the Route 53 Resolver DNS Firewall "prevent" control (BLOCK the demo beacon/tunnel domains). Off by default so the demo is detect-only. |
 | `scenario_04_enabled` | `false` | Deploy Scenario 4 (web attack / web plane). Off by default because it stands up a public ALB + a WAF web ACL — the **priciest** scenario, so tear it down when done. |
+| `scenario_05_enabled` | `false` | Deploy Scenario 5 (S3 data-events exfil / storage plane). Off by default because it deliberately turns on a **paid feature** — CloudTrail S3 data events (see `enable_data_events`) on a small "crown jewels" bucket — which is the whole point of the lesson. |
+| `enable_data_events` | `true` | Scenario 5 only: stand up the scoped CloudTrail S3 data-event trail (the thing that actually records object-level access). Set `false` and re-apply for the "and now the investigation returns nothing" experiment. Data events bill per event — turn it off when done. |
 
 > [!NOTE]
 > **GuardDuty and the Free Tier.** GuardDuty is a paid service, so `enable_guardduty`

@@ -26,6 +26,11 @@ output "glue_database_name" {
   value = aws_glue_catalog_database.audit.name
 }
 
+output "cloudtrail_table_name" {
+  description = "The shared Glue table over CloudTrail's S3 logs (management + S3 data events)."
+  value       = aws_glue_catalog_table.cloudtrail.name
+}
+
 output "athena_workgroup_name" {
   value = aws_athena_workgroup.investigations.name
 }

@@ -8,11 +8,6 @@ output "attack_function_name" {
   value       = aws_lambda_function.attack.function_name
 }
 
-output "cloudtrail_table" {
-  description = "Glue table to query in Athena."
-  value       = "${var.glue_database_name}.${aws_glue_catalog_table.cloudtrail.name}"
-}
-
 output "alarm_names" {
   description = "The metric-filter alarms that trip on the attack."
   value = [
