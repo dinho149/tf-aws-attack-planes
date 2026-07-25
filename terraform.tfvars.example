@@ -72,3 +72,21 @@ enable_dns_firewall = false
 # WAF-blocks-in-real-time loop, and tear it down (scenario_04_enabled = false and
 # re-apply, or terraform destroy) as soon as you're done.
 scenario_04_enabled = false
+
+# Scenario 5 (S3 data-events exfil / storage plane) is OFF by default because it
+# deliberately turns on a PAID feature: CloudTrail S3 data events (see below),
+# billed per object read, on a small "crown jewels" bucket. That's the whole
+# lesson - the log that tells you whether data actually left is off until you
+# turn it on. Turn it on to exercise the mass-read -> data-event -> alarm ->
+# Athena loop, and tear it down when done.
+scenario_05_enabled = false
+
+# Scenario 5 only: stand up the scoped CloudTrail S3 data-event trail - the thing
+# that actually records object-level GetObject/PutObject/DeleteObject. ON by
+# default; without it the exfil leaves NO record (that's the point of the plane).
+#
+# The experiment the blog ends on: set this to false and re-apply (removes the
+# scoped trail), re-fire the attack (./scripts/simulate-attack.sh -s 5), then run
+# the s05-01 Athena query again - it returns NOTHING. Data events bill per event,
+# so turn this off when you're finished.
+enable_data_events = true

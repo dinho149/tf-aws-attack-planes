@@ -49,7 +49,13 @@ data "aws_iam_policy_document" "trail_bucket" {
     condition {
       test     = "StringEquals"
       variable = "aws:SourceArn"
-      values   = ["arn:aws:cloudtrail:${local.region}:${local.account_id}:trail/${local.trail_name}"]
+      # Both the foundation management-events trail AND Scenario 5's scoped S3
+      # data-event trail write here. Listing both keeps the SourceArn scoping
+      # tight; the second entry is harmless when Scenario 5 isn't deployed.
+      values = [
+        "arn:aws:cloudtrail:${local.region}:${local.account_id}:trail/${local.trail_name}",
+        "arn:aws:cloudtrail:${local.region}:${local.account_id}:trail/${local.data_events_trail_name}",
+      ]
     }
   }
 
@@ -70,7 +76,12 @@ data "aws_iam_policy_document" "trail_bucket" {
     condition {
       test     = "StringEquals"
       variable = "aws:SourceArn"
-      values   = ["arn:aws:cloudtrail:${local.region}:${local.account_id}:trail/${local.trail_name}"]
+      # See AWSCloudTrailAclCheck: both the foundation trail and Scenario 5's
+      # data-event trail write under AWSLogs/<acct>/*.
+      values = [
+        "arn:aws:cloudtrail:${local.region}:${local.account_id}:trail/${local.trail_name}",
+        "arn:aws:cloudtrail:${local.region}:${local.account_id}:trail/${local.data_events_trail_name}",
+      ]
     }
   }
 

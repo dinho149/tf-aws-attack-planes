@@ -32,6 +32,12 @@
 #     time (the response is built into the control), so there is no responder and
 #     nothing to reset before a run.
 #
+#   Scenario 5 (S3 data-events exfil / storage plane):
+#     Assumes an over-permissive role and mass-reads the crown-jewels bucket
+#     (ListObjectsV2 + GetObject on every key) -> S3 data events in the scoped
+#     data-event trail. Detect-only (GuardDuty S3 Protection / a metric-filter
+#     alarm), so there is no responder and nothing to reset before a run.
+#
 # Pass --no-reset to skip the reset and observe the quarantined/isolated state.
 #
 # By default it discovers the function name and region from `terraform output`,
@@ -44,7 +50,7 @@
 #   ./scripts/simulate-attack.sh [options]
 #
 # Options:
-#   -s, --scenario N           Scenario to fire: 1, 2, 3, or 4 (default: 1)
+#   -s, --scenario N           Scenario to fire: 1, 2, 3, 4, or 5 (default: 1)
 #   -f, --function-name NAME   Attack Lambda to invoke (default: from terraform output)
 #   -p, --name-prefix PREFIX   Derive the name (matches var.name_prefix)
 #   -r, --region REGION        AWS region (default: terraform output region, else $AWS_REGION)
@@ -137,7 +143,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ "$SCENARIO" == "1" || "$SCENARIO" == "2" || "$SCENARIO" == "3" || "$SCENARIO" == "4" ]] || die "--scenario must be 1, 2, 3, or 4"
+[[ "$SCENARIO" == "1" || "$SCENARIO" == "2" || "$SCENARIO" == "3" || "$SCENARIO" == "4" || "$SCENARIO" == "5" ]] || die "--scenario must be 1, 2, 3, 4, or 5"
 [[ "$COUNT" =~ ^[0-9]+$ && "$COUNT" -ge 1 ]] || die "--count must be a positive integer"
 [[ "$INTERVAL" =~ ^[0-9]+$ ]] || die "--interval must be a non-negative integer"
 
@@ -158,9 +164,12 @@ elif [[ "$SCENARIO" == "2" ]]; then
 elif [[ "$SCENARIO" == "3" ]]; then
   FN_OUTPUT="scenario_03_attack_function_name"
   FN_SUFFIX="-s3-attack"
-else
+elif [[ "$SCENARIO" == "4" ]]; then
   FN_OUTPUT="scenario_04_attack_function_name"
   FN_SUFFIX="-s4-attack"
+else
+  FN_OUTPUT="scenario_05_attack_function_name"
+  FN_SUFFIX="-s5-attack"
 fi
 
 # An explicit --name-prefix wins over discovery.
@@ -254,14 +263,14 @@ reset_before_run() {
   elif [[ "$SCENARIO" == "2" ]]; then
     reset_isolation
   fi
-  # Scenarios 3 and 4 have no automated responder, so there is nothing to reset.
+  # Scenarios 3, 4 and 5 have no automated responder, so there is nothing to reset.
 }
 
 # --- fire ----------------------------------------------------------------------
 echo ">> scenario      : $SCENARIO"
 echo ">> attack Lambda : $FUNCTION_NAME"
 echo ">> region        : $REGION"
-if [[ "$SCENARIO" == "3" || "$SCENARIO" == "4" ]]; then
+if [[ "$SCENARIO" == "3" || "$SCENARIO" == "4" || "$SCENARIO" == "5" ]]; then
   echo ">> reset         : n/a (scenario $SCENARIO has no responder)"
 elif [[ "$RESET" -eq 1 ]]; then
   if [[ "$SCENARIO" == "1" ]]; then
@@ -319,9 +328,13 @@ elif [[ "$SCENARIO" == "2" ]]; then
 elif [[ "$SCENARIO" == "3" ]]; then
   echo "Done. Give Route 53 Resolver query logs a few min to deliver (the scheduled hunter"
   echo "catches the pattern on its next pass), then investigate:"
-else
+elif [[ "$SCENARIO" == "4" ]]; then
   echo "Done. The WAF-blocks alarm trips within ~1 min; give ALB access logs ~5 min to"
   echo "deliver to S3, then investigate:"
+else
+  echo "Done. Give CloudTrail ~1-2 min to deliver the S3 data events to CloudWatch (the"
+  echo "crown-jewels-reads alarm trips then), and to S3 before the s05 Athena queries have"
+  echo "data. If enable_data_events=false, the reads leave no record - that's the lesson."
 fi
 ATHENA_URL="$(tf_output athena_console_url)"
 if [[ -n "$ATHENA_URL" ]]; then

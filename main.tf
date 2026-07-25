@@ -116,3 +116,40 @@ module "scenario_04" {
 
   depends_on = [module.foundation]
 }
+
+# The shared cloudtrail_logs Glue table moved out of scenario_01 into the
+# foundation (more than one plane reads it - Scenario 5's S3 data events land in
+# the same trail prefix). Migrate the state address in place so an already-applied
+# estate doesn't destroy/recreate the table. Harmless no-op on a fresh apply.
+moved {
+  from = module.scenario_01[0].aws_glue_catalog_table.cloudtrail
+  to   = module.foundation.aws_glue_catalog_table.cloudtrail
+}
+
+module "scenario_05" {
+  source = "./modules/scenario-05-s3-exfil"
+  count  = var.scenario_05_enabled ? 1 : 0
+
+  name_prefix        = var.name_prefix
+  auto_fire          = var.auto_fire
+  enable_guardduty   = var.enable_guardduty
+  enable_data_events = var.enable_data_events
+
+  # Wiring from the shared foundation. Scenario 5 stands up a scoped S3 data-event
+  # trail that delivers into the shared bucket (same AWSLogs/CloudTrail prefix, so
+  # the shared cloudtrail_logs table sees it) and the shared CloudWatch log group
+  # (where the metric-filter alarm watches). Delivering to the bucket validates the
+  # (foundation-owned) bucket policy at apply, so - like Scenarios 3 and 4 - the
+  # whole module is sequenced AFTER the foundation via depends_on.
+  account_id                = module.foundation.account_id
+  region                    = var.region
+  log_bucket_id             = module.foundation.log_bucket_id
+  cloudtrail_log_group_arn  = module.foundation.cloudtrail_log_group_arn
+  cloudtrail_log_group_name = module.foundation.cloudtrail_log_group_name
+  glue_database_name        = module.foundation.glue_database_name
+  athena_workgroup_name     = module.foundation.athena_workgroup_name
+  sns_topic_arn             = module.foundation.sns_topic_arn
+  guardduty_detector_id     = module.foundation.guardduty_detector_id
+
+  depends_on = [module.foundation]
+}

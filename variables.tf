@@ -57,3 +57,15 @@ variable "scenario_04_enabled" {
   type        = bool
   default     = false
 }
+
+variable "scenario_05_enabled" {
+  description = "Deploy Scenario 5 (S3 data-events exfil / storage plane). Off by default because it deliberately turns on a paid feature - CloudTrail S3 data events (see enable_data_events), billed per object read - on a small 'crown jewels' bucket. That paid feature is the entire point of the lesson."
+  type        = bool
+  default     = false
+}
+
+variable "enable_data_events" {
+  description = "Scenario 5 only: stand up the scoped CloudTrail S3 data-event trail (the thing that actually records object-level GetObject/PutObject/DeleteObject). On by default - without it the exfil leaves no record, which is the lesson. Set it to false and re-apply to run the blog's 'and now the investigation returns nothing' experiment. Data events are billed per event, so turn it off when you're done."
+  type        = bool
+  default     = true
+}
