@@ -8,8 +8,7 @@
 > simulated attack at it, detect it, and investigate what it caught — then point Claude or
 > Codex at your own account and let it run the same checks.
 
-<!-- TODO: replace # with the Medium series URL once published -->
-[![Blog — A Field Guide to AWS Audit Logs](https://img.shields.io/badge/blog-A%20Field%20Guide%20to%20AWS%20Audit%20Logs-000000?style=for-the-badge&logo=medium&logoColor=white)](#)
+[![Blog — A Field Guide to AWS Audit Logs](https://img.shields.io/badge/blog-A%20Field%20Guide%20to%20AWS%20Audit%20Logs-000000?style=for-the-badge&logo=medium&logoColor=white)](https://medium.com/@omarnour_5895/what-is-this-user-doing-6e5b5613d147)
 [![Terraform](https://img.shields.io/badge/Terraform-%E2%89%A5%201.5-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)](https://developer.hashicorp.com/terraform)
 [![AWS Provider](https://img.shields.io/badge/AWS%20Provider-~%3E%205.40-FF9900?style=for-the-badge&logo=amazonwebservices&logoColor=white)](https://registry.terraform.io/providers/hashicorp/aws/latest)
 
@@ -758,14 +757,12 @@ exercise the full detect→respond pipeline.
 
 **A Field Guide to AWS Audit Logs** — the six-part series this repo companions:
 
-1. *"What Is This User Doing?"* — the five planes, and the demo repo
-2. *Leak a Key, Catch the Attacker* — the API plane
-3. *When CloudTrail Goes Blind* — the network plane
-4. *Malware Phones Home First* — the DNS plane
-5. *Flood the App, Read the Logs* — the web plane
-6. *"Can You Confirm the Data Wasn't Taken?"* — the storage plane
-
-<!-- TODO: add Medium links to each part above once published -->
+1. [*"What Is This User Doing?"*](https://medium.com/@omarnour_5895/what-is-this-user-doing-6e5b5613d147) — the five planes, and the demo repo
+2. [*Leak a Key, Catch the Attacker*](https://medium.com/@omarnour_5895/leak-a-key-catch-the-attacker-an-aws-audit-log-walkthrough-1b94b49ad397) — the API plane
+3. [*When CloudTrail Goes Blind*](https://medium.com/@omarnour_5895/when-cloudtrail-goes-blind-catching-exfiltration-with-vpc-flow-logs-1f9c82e3d453) — the network plane
+4. [*Malware Phones Home First*](https://medium.com/@omarnour_5895/malware-phones-home-first-catching-beacons-in-aws-dns-logs-489f6f2e69de) — the DNS plane
+5. [*Flood the App, Read the Logs*](https://medium.com/@omarnour_5895/flood-the-app-read-the-logs-what-waf-and-alb-actually-tell-you-82294de0a1a7) — the web plane
+6. [*"Can You Confirm the Data Wasn't Taken?"*](https://medium.com/@omarnour_5895/can-you-confirm-the-data-wasnt-taken-s3-data-events-in-aws-b38a4a602041) — the storage plane
 
 - 🤖 **MCP server:** [`mcp-server/README.md`](mcp-server/README.md) — tools, discovery, IAM.
 - 🔎 **Saved queries & tables:** each module's `investigate.tf`.
