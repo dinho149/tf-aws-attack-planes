@@ -1,0 +1,87 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "IdentityAndTags",
+      "Effect": "Allow",
+      "Action": [
+        "sts:GetCallerIdentity",
+        "tag:GetResources"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ConfigDiscoveryReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "cloudtrail:DescribeTrails",
+        "cloudtrail:GetTrailStatus",
+        "cloudtrail:GetEventSelectors",
+        "cloudtrail:ListTrails",
+        "guardduty:ListDetectors",
+        "guardduty:GetDetector",
+        "ec2:DescribeFlowLogs",
+        "ec2:DescribeVpcs",
+        "route53resolver:ListResolverQueryLogConfigs",
+        "route53resolver:ListResolverQueryLogConfigAssociations",
+        "route53resolver:ListFirewallRuleGroups",
+        "wafv2:ListWebACLs",
+        "wafv2:GetWebACL",
+        "wafv2:ListLoggingConfigurations",
+        "elasticloadbalancing:DescribeLoadBalancers",
+        "elasticloadbalancing:DescribeLoadBalancerAttributes",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:GetBucketVersioning",
+        "s3:GetBucketPolicy",
+        "sns:ListTopics",
+        "sns:ListSubscriptionsByTopic",
+        "cloudwatch:DescribeAlarms"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AthenaAndGlueQuery",
+      "Effect": "Allow",
+      "Action": [
+        "athena:ListNamedQueries",
+        "athena:BatchGetNamedQuery",
+        "athena:GetNamedQuery",
+        "athena:StartQueryExecution",
+        "athena:GetQueryExecution",
+        "athena:GetQueryResults",
+        "athena:StopQueryExecution",
+        "athena:GetWorkGroup",
+        "glue:GetTable",
+        "glue:GetTables",
+        "glue:GetDatabase",
+        "glue:GetPartitions"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "LogsInsightsQuery",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups",
+        "logs:StartQuery",
+        "logs:GetQueryResults",
+        "logs:StopQuery"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AthenaResultsBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:GetBucketLocation",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::atkplane-audit-logs-*",
+        "arn:aws:s3:::atkplane-audit-logs-*/athena-results/*"
+      ]
+    }
+  ]
+}
