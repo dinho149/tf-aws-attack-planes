@@ -80,6 +80,66 @@ crown-jewels bucket in the last 6 hours?"* — it calls the tools itself. See
 
 ---
 
+## 🛠️ Task Runner (`make`)
+
+Every command in this README also has a `make` target. The Makefile is a thin wrapper — each
+recipe echoes the real `terraform` / `simulate-attack.sh` command before running it, so you can
+always drop back to the raw tool. `make help` is the index.
+
+```bash
+make preflight     # terraform / aws / python3 / jq + your AWS identity
+make tfvars        # bootstrap terraform.tfvars from the example (never overwrites)
+make deploy_1      # stand up scenario 1
+make scenario_1    # fire its attack
+make athena        # open the Athena console for this deployment
+make destroy       # tear it down (typed confirmation)
+```
+
+| Group | Targets |
+|---|---|
+| Terraform | `init` `reinit` `plan` `apply` `destroy` `outputs` `athena` `fmt` `validate` `lint` |
+| Deploy | `deploy_1` … `deploy_5`, `deploy_all` |
+| Fire | `scenario_1` … `scenario_5`, `fire_all` |
+| MCP | `mcp` `mcp-test` `mcp-dev` `mcp-run` `mcp-register` |
+| Housekeeping | `preflight` `tfvars` `test` `clean` `distclean` |
+
+Variables: `REGION` `PROFILE` `AUTO` `ONLY` `CONFIRM` `N` `I` `ARGS` `OUT` `TF_ARGS`.
+
+```bash
+make scenario_2 N=5 I=60          # fire 5 times, 60s apart
+make scenario_1 ARGS=--no-reset   # observe the quarantined state
+make deploy_3 REGION=eu-west-1
+make apply AUTO=1                 # -auto-approve
+make outputs OUT=log_bucket       # one raw value
+```
+
+**Worth knowing before you run it:**
+
+- **`deploy_N` is additive.** It passes `-var scenario_0N_enabled=true` and leaves the other
+  scenarios as `terraform.tfvars` has them — so if your tfvars enables all five, `make deploy_3`
+  applies all five. Read the plan before approving. `ONLY=1` deploys that scenario exclusively
+  and **destroys the other four**.
+- **`apply` and `destroy` prompt by default**; `AUTO=1` adds `-auto-approve`. `destroy` also has
+  a typed guard (`CONFIRM=destroy` skips it, for scripted teardown).
+- **`destroy` needs an authenticated `aws` CLI**, not just Terraform credentials — scenario 1 has
+  a destroy-time provisioner that invokes a cleanup Lambda to remove the out-of-band
+  `atkplane-persist-*` IAM users. If it can't run, live leaked credentials are left behind. That's
+  what `make preflight` checks.
+- **Don't change `REGION` between apply and destroy** — the destroy provisioner reads the region
+  from state, not the flag.
+- **`-var` precedence**: CLI beats `terraform.tfvars` beats defaults. Variables the Makefile
+  doesn't pass (`alert_email`, `enable_guardduty`, `enable_data_events`, …) still come from your
+  tfvars — `deploy_5` in particular inherits `enable_data_events`, which bills per event.
+- **`clean`/`distclean` never touch `terraform.tfstate*` or `terraform.tfvars`.** State is local
+  with no backend; deleting it orphans every AWS resource.
+- **`make lint`** treats `fmt -check` and `validate` as hard gates; tflint findings are advisory
+  (there's no `.tflint.hcl` yet). `TFLINT_STRICT=1` makes them fatal.
+- **`make mcp-dev`** needs node/npx — the MCP Inspector is an npm package.
+
+Requires GNU Make 3.81+ (what macOS ships) — no GNU-only extensions are used.
+
+---
+
 ## ✨ What You Get
 
 | | Capability | What it does |
@@ -179,7 +239,8 @@ actual SQL statement.
 │       └── investigate.tf   # (3) investigate: saved Athena queries over the shared cloudtrail_logs table (no new table)
 ├── scripts/
 │   └── simulate-attack.sh   # fire a scenario's attack Lambda on demand, N times (see "Re-run the attack")
-└── mcp-server/              # MCP server: audit-log health checks + investigations for Claude/Codex (see "MCP server")
+├── mcp-server/              # MCP server: audit-log health checks + investigations for Claude/Codex (see "MCP server")
+└── Makefile                 # task runner over terraform + simulate-attack.sh + the MCP venv (`make help`)
 ```
 
 Every scenario module follows the same shape: **trigger the attack · detect it · investigate
